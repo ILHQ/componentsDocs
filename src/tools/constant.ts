@@ -1,0 +1,5 @@
+// node_modules 包对应的cdn
+export const CND_PACKAGE_TYPE: any = {
+  react: 'https://esm.sh/react@18.2.0',
+  'react-dom': 'https://esm.sh/react-dom@18.2.0',
+};
