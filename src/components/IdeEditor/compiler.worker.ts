@@ -7,75 +7,31 @@ import {
 } from '@/tools/utils';
 import { CND_PACKAGE_TYPE } from '@/tools/constant';
 
-// const babelTransform = (filename: string, code: string, files: any) => {
-//   const _code = beforeTransformCodeHandler(filename, code);
-//   let result = '';
-//   try {
-//     result = transform(_code, {
-//       presets: ['react', 'typescript'],
-//       filename,
-//       plugins: [customResolver(files)],
-//     }).code!;
-//   } catch (e) {
-//     self.postMessage({ type: 'ERROR', error: e });
-//   }
-//   return result;
-// };
-
-// const customResolver = (files: any) => {
-//   return {
-//     visitor: {
-//       ImportDeclaration(path: any) {
-//         const moduleName: string = path.node.source.value;
-//         if (moduleName.startsWith('.')) {
-//           const module = getModuleFile(files, moduleName);
-//           if (!module) return;
-//           if (module.name.endsWith('.css')) {
-//             path.node.source.value = css2Js(module);
-//           } else if (module.name.endsWith('.json')) {
-//             path.node.source.value = json2Js(module);
-//           } else {
-//             console.log(moduleName);
-//             path.node.source.value = URL.createObjectURL(
-//               new Blob([babelTransform(module.name, module.value, files)], {
-//                 type: 'application/javascript',
-//               }),
-//             );
-//           }
-//         }
-//       },
-//     },
-//   };
-// };
-//
-// const compile = (files: any) => {
-//   const main = files[ENTRY_FILE_NAME];
-//   const compileCode = babelTransform(ENTRY_FILE_NAME, main.value, files);
-//   return { compileCode };
-// };
-
-// self.addEventListener('message', async ({ data }) => {
-//   try {
-//     if (typeof data === 'string') {
-//       self.postMessage({
-//         type: 'UPDATE_FILE',
-//         data: transform(data, {
-//           presets: ['react', 'typescript'],
-//           retainLines: true,
-//           filename: 'tempFileName',
-//         }).code,
-//       });
-//       return;
-//     }
-//
-//     self.postMessage({
-//       type: 'UPDATE_FILES',
-//       data: compile(data),
-//     });
-//   } catch (e) {
-//     self.postMessage({ type: 'ERROR', error: e });
-//   }
-// });
+const customResolver = (code: any) => {
+  return {
+    visitor: {
+      ImportDeclaration(path: any) {
+        console.log(111, path);
+        const moduleName: string = path.node.source.value;
+        if (!moduleName.startsWith('.') && !moduleName.startsWith('/')) {
+          // const module = getModuleFile(files, moduleName);
+          // if (!module) return;
+          // if (module.name.endsWith('.css')) {
+          //   path.node.source.value = css2Js(module);
+          // } else if (module.name.endsWith('.json')) {
+          //   path.node.source.value = json2Js(module);
+          // } else {
+          //   path.node.source.value = URL.createObjectURL(
+          //     new Blob([babelTransform(module.name, module.value, files)], {
+          //       type: 'application/javascript',
+          //     }),
+          //   );
+          // }
+        }
+      },
+    },
+  };
+};
 
 // 匹配code中的来自node_models的import
 function parseImports(code: string) {
@@ -88,7 +44,7 @@ function parseImports(code: string) {
   };
   const importOrigin: any = {
     react: "import React from 'react';",
-    'react-dom': "import ReactDom from 'react-dom';",
+    'react-dom': "import ReactDOM from 'react-dom';",
   };
   let resultCode = code;
 
@@ -104,11 +60,28 @@ function parseImports(code: string) {
       importMap[moduleName] = CND_PACKAGE_TYPE?.[moduleName]
         ? CND_PACKAGE_TYPE[moduleName]
         : `https://esm.sh/${moduleName}@latest`;
+      // 从代码中移除导入语句
+      resultCode = resultCode.replace(importStatement, '');
+      // 记录移除的语句
+      importOrigin[moduleName] = importStatement;
+    } else {
+      // 本地路径
+      console.log(moduleName);
+      // const a = URL.createObjectURL(
+      //   new Blob(
+      //     [
+      //       Babel.transform(code, {
+      //         presets: ['react', 'typescript'],
+      //         retainLines: true,
+      //         filename: 'file1',
+      //       }).code,
+      //     ],
+      //     {
+      //       type: 'application/javascript',
+      //     },
+      //   ),
+      // );
     }
-
-    // 从代码中移除导入语句
-    resultCode = resultCode.replace(importStatement, '');
-    importOrigin[moduleName] = importStatement;
   }
 
   // 移除多余的空白行
@@ -129,7 +102,7 @@ const transpile = (code: string) => {
       transformCode: Babel.transform(parseResult.code, {
         presets: ['react', 'typescript'],
         retainLines: true,
-        filename: 'reactFile',
+        filename: 'file',
       }).code,
       importMap: parseResult.importMap,
       importOrigin: parseResult.importOrigin,

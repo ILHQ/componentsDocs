@@ -3,7 +3,30 @@ import * as monaco from 'monaco-editor';
 import { useEffect, useRef } from 'react';
 import { Splitter } from 'antd';
 import CompilerWorker from './compiler.worker.ts?worker&inline';
-// import * as Babel from '@babel/standalone';
+import { DownOutlined } from '@ant-design/icons';
+import { Tree } from 'antd';
+import type { TreeDataNode } from 'antd';
+
+const treeData: TreeDataNode[] = [
+  {
+    title: 'App',
+    key: '2',
+    children: [
+      {
+        title: 'index.jsx',
+        key: '3',
+      },
+      {
+        title: 'index.less',
+        key: '3',
+      },
+    ],
+  },
+  {
+    title: 'main.jsx',
+    key: '1',
+  },
+];
 
 let compiler: any;
 const IdeEditor = () => {
@@ -28,13 +51,12 @@ const IdeEditor = () => {
       noSyntaxValidation: false,
     });
     const editor = monaco.editor.create(el, {
-      value: `import React, { useEffect } from 'react';
-const App = () => {
-useEffect(() => {
-        console.log(123)
-    }, [])
-return <div>Hello JSX!</div>
-};`,
+      value: `import React from 'react';
+import ReactDOM from 'react-dom';
+import App from './App';
+      
+const root = ReactDOM.createRoot(document.getElementById('viewRoot'));
+root.render(<App />);`,
       theme: 'vs-dark',
       language: 'typescript',
       readOnly: false,
@@ -77,7 +99,7 @@ return <div>Hello JSX!</div>
             ${Object.values(data.data.importOrigin).join('\n')}
             try {
               ${data.data.transformCode}
-              const root = ReactDom.createRoot(document.getElementById('viewRoot'));
+              const root = ReactDOM.createRoot(document.getElementById('viewRoot'));
               root.render(React.createElement(App));
             } catch (e) {
               document.body.innerHTML = '<pre style="color:red;">' + e + '</pre>';
@@ -93,57 +115,26 @@ return <div>Hello JSX!</div>
         } catch (error) {
           console.error('importmap 解析错误:', error);
         }
-        // setCompiledFiles(data);
       }
       if (data.type === 'ERROR') {
         console.log('error', data);
       }
     });
-    // compiler.addEventListener('message', ({ data }: { data: any }) => {
-    //   if (data.type === 'UPDATE_FILES') {
-    //     try {
-    //       console.log(1, data);
-    //       // JSON.parse(files[IMPORT_MAP_FILE_NAME].value);
-    //       // data.data.importmap = files[IMPORT_MAP_FILE_NAME].value;
-    //     } catch (error) {
-    //       console.error('importmap 解析错误:', error);
-    //     }
-    //     // setCompiledFiles(data);
-    //   } else if (data.type === 'UPDATE_FILE') {
-    //     console.log(2, data);
-    //     // setCompiledCode(data.data);
-    //   } else if (data.type === 'ERROR') {
-    //     console.log(data);
-    //   }
-    // });
-
-    // // const js = transpile(code);
-    // const html = `
-    //   <html>
-    //     <head></head>
-    //     <body>
-    //       <div id="viewRoot"></div>
-    //       <script>
-    //         try {
-    //           ${js}
-    //           const root = ReactDOM.createRoot(document.getElementById('viewRoot'));
-    //           root.render(React.createElement(App));
-    //         } catch (e) {
-    //           document.body.innerHTML = '<pre style="color:red;">' + e + '</pre>';
-    //         }
-    //       </script>
-    //     </body>
-    //   </html>
-    // `;
-    // // console.log(html);
-    // if (iframeRef.current) {
-    //   iframeRef.current.srcdoc = html;
-    // }
   };
 
   return (
     <div className="ide-editor">
       <Splitter>
+        <Splitter.Panel defaultSize="180" min="0" max="200">
+          <div className="menu-list">
+            <Tree
+              switcherIcon={<DownOutlined />}
+              defaultExpandedKeys={['0-0-0']}
+              // onSelect={onSelect}
+              treeData={treeData}
+            />
+          </div>
+        </Splitter.Panel>
         <Splitter.Panel defaultSize="40%" min="20%" max="70%">
           <div id="ideEditor" className="idea" />
         </Splitter.Panel>
