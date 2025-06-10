@@ -3,32 +3,70 @@ import * as monaco from 'monaco-editor';
 import { useEffect, useRef } from 'react';
 import { Splitter } from 'antd';
 import CompilerWorker from './compiler.worker.ts?worker&inline';
+import { EXTENSION_LANGUAGE } from '@/tools/constant';
 import { DownOutlined } from '@ant-design/icons';
 import { Tree } from 'antd';
 import type { TreeDataNode } from 'antd';
 
+// 文件系统
+const filesMap: any = {
+  'main.jsx': `import React from 'react';
+import ReactDOM from 'react-dom';
+import App from './App';
+      
+const root = ReactDOM.createRoot(document.getElementById('viewRoot'));
+root.render(<App />);`,
+  App: {
+    'index.jsx': `import React, { useEffect } from 'react';
+import lodash from 'lodash';
+import './index.less';
+const App = () => {
+  useEffect(() => {
+    console.log(lodash);
+  }, []);
+  return <div>Hello World!</div>;
+};
+
+export default App;
+`,
+    'index.less': `.a{}`,
+  },
+};
+
 const treeData: TreeDataNode[] = [
   {
     title: 'App',
-    key: '2',
+    key: 'App',
+    isLeaf: false,
     children: [
       {
         title: 'index.jsx',
-        key: '3',
+        key: 'App/index.jsx',
+        isLeaf: true,
       },
       {
         title: 'index.less',
-        key: '3',
+        key: 'App/index.less',
+        isLeaf: true,
       },
     ],
   },
   {
     title: 'main.jsx',
-    key: '1',
+    key: 'main.jsx',
+    isLeaf: true,
   },
 ];
 
+// 解析器
 let compiler: any;
+// 编辑器
+let editor: any;
+// 上一个树的选择
+let prevSelect: any = null;
+// 当前树的选择
+let currentSelect: any = null;
+
 const IdeEditor = () => {
   const iframeRef: any = useRef(null);
 
@@ -50,13 +88,8 @@ const IdeEditor = () => {
       noSemanticValidation: false,
       noSyntaxValidation: false,
     });
-    const editor = monaco.editor.create(el, {
-      value: `import React from 'react';
-import ReactDOM from 'react-dom';
-import App from './App';
-      
-const root = ReactDOM.createRoot(document.getElementById('viewRoot'));
-root.render(<App />);`,
+    editor = monaco.editor.create(el, {
+      value: '',
       theme: 'vs-dark',
       language: 'typescript',
       readOnly: false,
@@ -70,8 +103,10 @@ root.render(<App />);`,
     });
 
     load();
+    // command + S 保存
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      compiler?.postMessage(editor.getValue());
+      saveToCatalogue(currentSelect);
+      compiler?.postMessage(filesMap);
     });
     return () => {
       editor.dispose();
@@ -86,28 +121,21 @@ root.render(<App />);`,
           console.log(data);
 
           const html = `
-      <html>
-        <head></head>
-        <body>
-          <div id="viewRoot"></div>
-          <script type="importmap">
-            {
-              "imports": ${JSON.stringify(data.data.importMap)}
-            }
-          </script>
-          <script type="module">
-            ${Object.values(data.data.importOrigin).join('\n')}
-            try {
-              ${data.data.transformCode}
-              const root = ReactDOM.createRoot(document.getElementById('viewRoot'));
-              root.render(React.createElement(App));
-            } catch (e) {
-              document.body.innerHTML = '<pre style="color:red;">' + e + '</pre>';
-            }
-          </script>
-        </body>
-      </html>
-    `;
+            <html>
+              <head></head>
+              <body>
+                <div id="viewRoot"></div>
+                <script type="importmap">
+                  {
+                    "imports": ${JSON.stringify(data.data.importMap)}
+                  }
+                </script>
+                <script type="module">
+                  ${data.data.transformCode}
+                </script>
+              </body>
+            </html>
+          `;
           console.log(html);
           if (iframeRef.current) {
             iframeRef.current.srcdoc = html;
@@ -122,6 +150,58 @@ root.render(<App />);`,
     });
   };
 
+  // 选择
+  const onSelect = (keys: any[], e: any) => {
+    if (!e.node.isLeaf) return;
+    if (keys.length === 0) return;
+    prevSelect = currentSelect;
+    currentSelect = keys[0];
+    saveToCatalogue(prevSelect);
+    // 文件后缀
+    const ext = currentSelect.split('.').pop().toLowerCase();
+    monaco.editor.setModelLanguage(
+      editor.getModel(),
+      EXTENSION_LANGUAGE[ext] || 'plaintext',
+    );
+    setPathCode(currentSelect);
+  };
+
+  // 根据路径,保存code到目录
+  const saveToCatalogue = (path: string) => {
+    if (path) {
+      const pathArr = path.split('/');
+      let catalogue = filesMap;
+      pathArr.forEach((t: string, i: number) => {
+        if (i === pathArr.length - 1) {
+          catalogue[t] = editor.getValue();
+        } else {
+          if (!catalogue[t]) {
+            catalogue[t] = {};
+          }
+          catalogue = catalogue[t];
+        }
+      });
+    }
+  };
+
+  // 根据路径,设置code到编辑器
+  const setPathCode = (path: string) => {
+    if (path) {
+      const pathArr = path.split('/');
+      let catalogue = filesMap;
+      pathArr.forEach((t: string, i: number) => {
+        if (i === pathArr.length - 1) {
+          editor.setValue(catalogue[t] || '');
+        } else {
+          if (!catalogue[t]) {
+            catalogue[t] = {};
+          }
+          catalogue = catalogue[t];
+        }
+      });
+    }
+  };
+
   return (
     <div className="ide-editor">
       <Splitter>
@@ -129,8 +209,9 @@ root.render(<App />);`,
           <div className="menu-list">
             <Tree
               switcherIcon={<DownOutlined />}
-              defaultExpandedKeys={['0-0-0']}
-              // onSelect={onSelect}
+              defaultExpandedKeys={['2']}
+              defaultSelectedKeys={['3']}
+              onSelect={onSelect}
               treeData={treeData}
             />
           </div>
