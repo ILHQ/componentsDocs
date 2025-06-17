@@ -1,62 +1,100 @@
 import './index.less';
 import * as monaco from 'monaco-editor';
-import { useEffect, useRef } from 'react';
-import { Splitter } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { Splitter, Tree } from 'antd';
 import CompilerWorker from './compiler.worker.ts?worker&inline';
 import { EXTENSION_LANGUAGE } from '@/tools/constant';
 import { DownOutlined } from '@ant-design/icons';
-import { Tree } from 'antd';
-import type { TreeDataNode } from 'antd';
 
-// 文件系统
-const filesMap: any = {
+const catalog = '/src/pages/test';
+
+const allModules = import.meta.glob('/src/pages/**/*.*', { as: 'raw' });
+
+function buildTreeAndNestedFiles(baseDir: string) {
+  const root: any[] = [];
+  const nestedFiles: any = {};
+
+  // 工具函数：查找/创建子节点
+  function findOrCreateChild(
+    children: any[],
+    name: string,
+    key: string,
+    isFile: boolean,
+  ) {
+    let child = children.find((c) => c.title === name);
+    if (!child) {
+      child = {
+        title: name,
+        key,
+        isLeaf: isFile,
+        ...(isFile ? {} : { children: [] }),
+      };
+      children.push(child);
+    }
+    return child;
+  }
+
+  // 过滤出匹配 baseDir 的模块
+  const filteredEntries = Object.entries(allModules).filter(([path]) =>
+    path.startsWith(baseDir),
+  );
+
+  // 构建 tree 和 files
+  const loadPromises = filteredEntries.map(async ([fullPath, loader]) => {
+    const raw = await loader();
+    const relativePath = fullPath.replace('/src/pages/', '');
+    const parts = relativePath.split('/');
+
+    let currentTree = root;
+    let currentFiles = nestedFiles;
+    let currentPath = '';
+
+    for (let i = 0; i < parts.length; i++) {
+      const name = parts[i];
+      const isFile = i === parts.length - 1;
+      currentPath += currentPath ? `/${name}` : name;
+
+      const node = findOrCreateChild(currentTree, name, currentPath, isFile);
+
+      if (isFile) {
+        currentFiles[name] = raw;
+      } else {
+        currentFiles[name] = currentFiles[name] || {};
+        currentFiles = currentFiles[name];
+        currentTree = node.children;
+      }
+    }
+  });
+
+  // 排序函数
+  function sortTree(tree: any[]) {
+    tree.sort((a, b) => {
+      if (a.isLeaf !== b.isLeaf) return a.isLeaf ? 1 : -1;
+      return a.title.localeCompare(b.title);
+    });
+    for (const node of tree) {
+      if (!node.isLeaf && Array.isArray(node.children)) {
+        sortTree(node.children);
+      }
+    }
+  }
+
+  return Promise.all(loadPromises).then(() => {
+    sortTree(root);
+    return {
+      tree: root,
+      files: nestedFiles,
+    };
+  });
+}
+
+const main = {
   'main.jsx': `import React from 'react';
 import ReactDOM from 'react-dom';
-import App from './App';
-      
+import App from './${catalog.split('/').pop()}';
 const root = ReactDOM.createRoot(document.getElementById('viewRoot'));
 root.render(<App />);`,
-  App: {
-    'index.jsx': `import React, { useEffect } from 'react';
-import lodash from 'lodash';
-import './index.less';
-const App = () => {
-  useEffect(() => {
-    console.log(lodash);
-  }, []);
-  return <div>Hello World!</div>;
 };
-
-export default App;
-`,
-    'index.less': `.a{}`,
-  },
-};
-
-const treeData: TreeDataNode[] = [
-  {
-    title: 'App',
-    key: 'App',
-    isLeaf: false,
-    children: [
-      {
-        title: 'index.jsx',
-        key: 'App/index.jsx',
-        isLeaf: true,
-      },
-      {
-        title: 'index.less',
-        key: 'App/index.less',
-        isLeaf: true,
-      },
-    ],
-  },
-  {
-    title: 'main.jsx',
-    key: 'main.jsx',
-    isLeaf: true,
-  },
-];
 
 // 解析器
 let compiler: any;
@@ -66,11 +104,21 @@ let editor: any;
 let prevSelect: any = null;
 // 当前树的选择
 let currentSelect: any = null;
-
 const IdeEditor = () => {
+  // 文件code树
+  const [filesCodeTree, setFilesCodeTree] = useState<any>({ ...main });
+  const filesCodeTreeRef = useRef(null);
+  filesCodeTreeRef.current = filesCodeTree;
+  // 文件目录树
+  const [fileCatalogueTree, setFileCatalogueTree] = useState<any[]>([]);
+  // 默认展开
+  const [defaultExpandedKeys, setDefaultExpandedKeys] = useState<any[]>([]);
+  // 默认选中
+  const [defaultSelectedKeys, setDefaultSelectedKeys] = useState<any[]>([]);
   const iframeRef: any = useRef(null);
 
   useEffect(() => {
+    getFilesAndPath();
     const el: any = document.getElementById('ideEditor');
     // 设置 JSX/TSX 编译选项
     monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
@@ -106,12 +154,32 @@ const IdeEditor = () => {
     // command + S 保存
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       saveToCatalogue(currentSelect);
-      compiler?.postMessage(filesMap);
+      console.log(filesCodeTreeRef.current);
+      compiler?.postMessage(filesCodeTreeRef.current);
     });
     return () => {
       editor.dispose();
     };
   }, []);
+
+  // 获取文件
+  const getFilesAndPath = () => {
+    buildTreeAndNestedFiles(catalog).then(({ tree, files }) => {
+      setFilesCodeTree((file: any) => ({
+        ...file,
+        ...files,
+      }));
+      setFileCatalogueTree(tree);
+      setDefaultExpandedKeys([tree?.[0]?.key]);
+      const defaultKey = tree?.[0]?.children?.find((t: any) =>
+        ['index.jsx', 'index.tsx'].includes(t.title),
+      )?.key;
+      setDefaultSelectedKeys([defaultKey]);
+      setPathCode(defaultKey, files);
+      console.log('目录结构树:', tree);
+      console.log('文件内容映射:', files);
+    });
+  };
 
   const load = () => {
     compiler = new CompilerWorker();
@@ -167,10 +235,10 @@ const IdeEditor = () => {
   };
 
   // 根据路径,保存code到目录
-  const saveToCatalogue = (path: string) => {
+  const saveToCatalogue = (path: string, files?: any) => {
     if (path) {
-      const pathArr = path.split('/');
-      let catalogue = filesMap;
+      const pathArr = path.split('/').filter((t) => !!t);
+      let catalogue = files || filesCodeTree;
       pathArr.forEach((t: string, i: number) => {
         if (i === pathArr.length - 1) {
           catalogue[t] = editor.getValue();
@@ -185,10 +253,10 @@ const IdeEditor = () => {
   };
 
   // 根据路径,设置code到编辑器
-  const setPathCode = (path: string) => {
+  const setPathCode = (path: string, files?: any) => {
     if (path) {
-      const pathArr = path.split('/');
-      let catalogue = filesMap;
+      const pathArr = path.split('/').filter((t) => !!t);
+      let catalogue = files || filesCodeTree;
       pathArr.forEach((t: string, i: number) => {
         if (i === pathArr.length - 1) {
           editor.setValue(catalogue[t] || '');
@@ -207,13 +275,15 @@ const IdeEditor = () => {
       <Splitter>
         <Splitter.Panel defaultSize="180" min="0" max="200">
           <div className="menu-list">
-            <Tree
-              switcherIcon={<DownOutlined />}
-              defaultExpandedKeys={['2']}
-              defaultSelectedKeys={['3']}
-              onSelect={onSelect}
-              treeData={treeData}
-            />
+            {defaultExpandedKeys?.length && defaultSelectedKeys?.length && (
+              <Tree
+                switcherIcon={<DownOutlined />}
+                defaultExpandedKeys={defaultExpandedKeys}
+                defaultSelectedKeys={defaultSelectedKeys}
+                onSelect={onSelect}
+                treeData={fileCatalogueTree}
+              />
+            )}
           </div>
         </Splitter.Panel>
         <Splitter.Panel defaultSize="40%" min="20%" max="70%">

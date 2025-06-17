@@ -51,9 +51,14 @@ export const beforeTransformCodeHandler = (filename: string, code: string) => {
 };
 
 // 在文件树中查找
-export function resolveImport(fileTree, fromPath, importPath) {
+export function resolveImport(
+  fileTree: any,
+  fromPath: string,
+  importPath: string,
+) {
+  console.log(fromPath, importPath);
   // 简单处理路径，支持 ./ 和 ../
-  function normalizePath(parts) {
+  function normalizePath(parts: any) {
     const stack = [];
     for (const part of parts) {
       if (part === '' || part === '.') continue;
@@ -66,7 +71,7 @@ export function resolveImport(fileTree, fromPath, importPath) {
     return stack;
   }
 
-  function getFileAtPath(obj, parts) {
+  function getFileAtPath(obj: any, parts: any[]) {
     let current = obj;
     for (const part of parts) {
       if (current && typeof current === 'object' && part in current) {
@@ -89,8 +94,14 @@ export function resolveImport(fileTree, fromPath, importPath) {
   // 拼接路径并归一化
   const fullPathParts = normalizePath([...fromDirParts, ...importParts]);
 
+  // 优先找 index.tsx
+  let target = getFileAtPath(fileTree, [...fullPathParts, 'index.tsx']);
+  if (typeof target === 'string') {
+    return target;
+  }
+
   // 优先找 index.jsx
-  let target = getFileAtPath(fileTree, [...fullPathParts, 'index.jsx']);
+  target = getFileAtPath(fileTree, [...fullPathParts, 'index.jsx']);
   if (typeof target === 'string') {
     return target;
   }
