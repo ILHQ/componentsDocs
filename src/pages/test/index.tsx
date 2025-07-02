@@ -1,11 +1,15 @@
-import React, { useEffect } from 'react';
-import lodash from 'lodash';
+import DeepTwinsEngine3D from 'deeptwins-engine-3d';
+import 'deeptwins-engine-3d.css';
+import { useEffect } from 'react';
 import './index.less';
+
 const Test = () => {
   useEffect(() => {
-    console.log(lodash);
+    const map = new DeepTwinsEngine3D.Map('map3dContainer');
+    map.setDefaultLayer(DeepTwinsEngine3D.DefaultBaseLayer.GAO_DE_IMG);
   }, []);
-  return <div className="test">Hello World!</div>;
+
+  return <div id="map3dContainer" />;
 };
 
 export default Test;

@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import * as path from 'path';
-// @ts-ignore
 import monacoEditorPlugin from 'vite-plugin-monaco-editor-esm';
 
 // https://vite.dev/config/
@@ -27,11 +26,11 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     proxy: {
-      '/api': {
-        target: 'http://192.168.3.200:60207',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
+      // '/static-cesium': {
+      //   target: 'https://esm.sh/deeptwins-cesium@0.0.21/',
+      //   changeOrigin: true,
+      //   rewrite: (path) => path.replace(/^\/static-cesium/, ''),
+      // },
     },
   },
 });

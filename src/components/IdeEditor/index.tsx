@@ -3,6 +3,7 @@ import * as monaco from 'monaco-editor';
 import { useEffect, useRef, useState } from 'react';
 import { Splitter, Tree } from 'antd';
 import CompilerWorker from './compiler.worker.ts?worker&inline';
+import { merge } from 'lodash';
 import { EXTENSION_LANGUAGE } from '@/tools/constant';
 import { DownOutlined } from '@ant-design/icons';
 
@@ -104,6 +105,7 @@ let editor: any;
 let prevSelect: any = null;
 // 当前树的选择
 let currentSelect: any = null;
+
 const IdeEditor = () => {
   // 文件code树
   const [filesCodeTree, setFilesCodeTree] = useState<any>({ ...main });
@@ -118,7 +120,6 @@ const IdeEditor = () => {
   const iframeRef: any = useRef(null);
 
   useEffect(() => {
-    getFilesAndPath();
     const el: any = document.getElementById('ideEditor');
     // 设置 JSX/TSX 编译选项
     monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
@@ -149,36 +150,33 @@ const IdeEditor = () => {
       noSemanticValidation: false,
       noSyntaxValidation: false,
     });
-
     load();
     // command + S 保存
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       saveToCatalogue(currentSelect);
-      console.log(filesCodeTreeRef.current);
       compiler?.postMessage(filesCodeTreeRef.current);
     });
+    getFilesAndPath();
     return () => {
-      editor.dispose();
+      editor && editor.dispose();
     };
   }, []);
 
   // 获取文件
-  const getFilesAndPath = () => {
-    buildTreeAndNestedFiles(catalog).then(({ tree, files }) => {
-      setFilesCodeTree((file: any) => ({
-        ...file,
-        ...files,
-      }));
-      setFileCatalogueTree(tree);
-      setDefaultExpandedKeys([tree?.[0]?.key]);
-      const defaultKey = tree?.[0]?.children?.find((t: any) =>
-        ['index.jsx', 'index.tsx'].includes(t.title),
-      )?.key;
-      setDefaultSelectedKeys([defaultKey]);
-      setPathCode(defaultKey, files);
-      console.log('目录结构树:', tree);
-      console.log('文件内容映射:', files);
-    });
+  const getFilesAndPath = async () => {
+    const { tree, files } = await buildTreeAndNestedFiles(catalog);
+    setFilesCodeTree((file: any) => merge(file, files));
+    setFileCatalogueTree(tree);
+    setDefaultExpandedKeys([tree?.[0]?.key]);
+    const defaultKey = tree?.[0]?.children?.find((t: any) =>
+      ['index.jsx', 'index.tsx'].includes(t.title),
+    )?.key;
+    setDefaultSelectedKeys([defaultKey]);
+    currentSelect = defaultKey;
+    setPathCode(defaultKey, files);
+    compiler?.postMessage(filesCodeTreeRef.current);
+    console.log('目录结构树:', tree);
+    console.log('文件内容映射:', files);
   };
 
   const load = () => {
@@ -188,9 +186,32 @@ const IdeEditor = () => {
         try {
           console.log(data);
 
+          // 生成 UMD 脚本标签
+          const umdScripts = Object.entries(data.data.scriptSrcMap || {})
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            .map(([_, scriptUrl]) => {
+              // 检查是否是 CSS 文件
+              if (typeof scriptUrl === 'string' && /\.css$/i.test(scriptUrl)) {
+                return `<link rel="stylesheet" href="${scriptUrl}" />`;
+              }
+              // JavaScript 文件
+              return `<script src="${scriptUrl}"></script>`;
+            })
+            .join('\n');
+
           const html = `
             <html>
-              <head></head>
+              <head>
+                ${umdScripts}
+              </head>
+              <style>
+                html,body,#viewRoot {
+                  padding: 0;
+                  margin: 0;
+                  width: 100%;
+                  height: 100%;
+                }
+              </style>
               <body>
                 <div id="viewRoot"></div>
                 <script type="importmap">
@@ -205,9 +226,9 @@ const IdeEditor = () => {
             </html>
           `;
           console.log(html);
-          if (iframeRef.current) {
-            iframeRef.current.srcdoc = html;
-          }
+
+          localStorage.setItem('preview-html', html);
+          iframeRef.current.src = location.origin + '/public/index.html';
         } catch (error) {
           console.error('importmap 解析错误:', error);
         }
@@ -249,6 +270,7 @@ const IdeEditor = () => {
           catalogue = catalogue[t];
         }
       });
+      setFilesCodeTree({ ...(files || filesCodeTree) });
     }
   };
 
@@ -273,7 +295,7 @@ const IdeEditor = () => {
   return (
     <div className="ide-editor">
       <Splitter>
-        <Splitter.Panel defaultSize="180" min="0" max="200">
+        <Splitter.Panel defaultSize="180" min="50" max="200">
           <div className="menu-list">
             {defaultExpandedKeys?.length && defaultSelectedKeys?.length && (
               <Tree
