@@ -7,8 +7,6 @@ import { merge } from 'lodash';
 import { EXTENSION_LANGUAGE } from '@/tools/constant';
 import { DownOutlined } from '@ant-design/icons';
 
-const catalog = '/src/pages/test';
-
 const allModules = import.meta.glob('/src/pages/**/*.*', { as: 'raw' });
 
 function buildTreeAndNestedFiles(baseDir: string) {
@@ -89,13 +87,13 @@ function buildTreeAndNestedFiles(baseDir: string) {
   });
 }
 
-const main = {
+const getMain = (catalog: string) => ({
   'main.jsx': `import React from 'react';
 import ReactDOM from 'react-dom';
 import App from './${catalog.split('/').pop()}';
 const root = ReactDOM.createRoot(document.getElementById('viewRoot'));
 root.render(<App />);`,
-};
+});
 
 // 解析器
 let compiler: any;
@@ -106,9 +104,11 @@ let prevSelect: any = null;
 // 当前树的选择
 let currentSelect: any = null;
 
-const IdeEditor = () => {
+const IdeEditor = ({ catalog }: any) => {
   // 文件code树
-  const [filesCodeTree, setFilesCodeTree] = useState<any>({ ...main });
+  const [filesCodeTree, setFilesCodeTree] = useState<any>({
+    ...getMain(catalog),
+  });
   const filesCodeTreeRef = useRef(null);
   filesCodeTreeRef.current = filesCodeTree;
   // 文件目录树
@@ -140,7 +140,7 @@ const IdeEditor = () => {
     editor = monaco.editor.create(el, {
       value: '',
       theme: 'vs-dark',
-      language: 'typescript',
+      language: 'javascript',
       readOnly: false,
       automaticLayout: true,
       fontSize: 18,
@@ -156,6 +156,7 @@ const IdeEditor = () => {
       saveToCatalogue(currentSelect);
       compiler?.postMessage(filesCodeTreeRef.current);
     });
+
     getFilesAndPath();
     return () => {
       editor && editor.dispose();
@@ -294,6 +295,7 @@ const IdeEditor = () => {
 
   return (
     <div className="ide-editor">
+      <div className="tips">control/command + s 保存</div>
       <Splitter>
         <Splitter.Panel defaultSize="180" min="50" max="200">
           <div className="menu-list">

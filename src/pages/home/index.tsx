@@ -4,7 +4,7 @@ import IdeEditor from '@/components/IdeEditor';
 const Home = () => {
   return (
     <div className="home">
-      <IdeEditor />
+      <IdeEditor catalog="/src/pages/test" />
     </div>
   );
 };
