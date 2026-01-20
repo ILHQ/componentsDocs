@@ -12,6 +12,7 @@
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
     "@babel/standalone": "^7.27.4",
+    "@deepinnet-components/upload-images": "0.0.3",
     "antd": "^5.25.4",
     "install": "^0.13.0",
     "loadsh": "^0.0.4",

@@ -5,9 +5,11 @@ import {
   beforeTransformCodeHandler,
   resolveImport,
   cssUrl2Js,
-} from '@/tools/utils';
-import { ESM_PACKAGE_TYPE, UMD_PACKAGE_TYPE } from '@/tools/constant';
+  resolveConfig,
+} from './utils';
 import { merge } from 'lodash';
+
+let CONFIG: any = {};
 
 /**
  * 构建导入文件的完整路径
@@ -39,31 +41,31 @@ function handleExternalModule(
   scriptSrcMap: any,
 ): string {
   // 首先检查是否在 UMD_PACKAGE_TYPE 中有对应的地址
-  if (UMD_PACKAGE_TYPE?.[moduleName]) {
+  if (CONFIG.UMD_PACKAGE_TYPE?.[moduleName]) {
     // 将 UMD 模块添加到 scriptSrcMap
-    scriptSrcMap[moduleName] = UMD_PACKAGE_TYPE[moduleName];
+    scriptSrcMap[moduleName] = CONFIG.UMD_PACKAGE_TYPE[moduleName];
     console.log(
-      `UMD 模块 ${moduleName} 在 CDN 中存在，将使用地址: ${UMD_PACKAGE_TYPE[moduleName]}`,
+      `UMD 模块 ${moduleName} 在 CDN 中存在，将使用地址: ${CONFIG.UMD_PACKAGE_TYPE[moduleName]}`,
     );
     return 'umd';
   }
   // 检查是否在 ESM_PACKAGE_TYPE 中有对应的地址
-  if (ESM_PACKAGE_TYPE?.[moduleName]) {
+  if (CONFIG.ESM_PACKAGE_TYPE?.[moduleName]) {
     // 检查是否是 CSS 文件
     if (/\.css$/i.test(moduleName)) {
       // CSS 文件不应该添加到 importMap，但应该返回 true 以便后续处理
       console.log(
-        `CSS 模块 ${moduleName} 在 CDN 中存在，将使用地址: ${ESM_PACKAGE_TYPE[moduleName]}`,
+        `CSS 模块 ${moduleName} 在 ESM 中存在，将使用地址: ${CONFIG.ESM_PACKAGE_TYPE[moduleName]}`,
       );
       return 'css';
     }
 
     // 只有在 ESM_PACKAGE_TYPE 中存在的 JavaScript/Wasm 模块才添加到 importMap
-    importMap[moduleName] = ESM_PACKAGE_TYPE[moduleName];
+    importMap[moduleName] = CONFIG.ESM_PACKAGE_TYPE[moduleName];
     return 'esm';
   } else {
     // 不在 ESM_PACKAGE_TYPE 中的模块，不添加到 importMap
-    console.warn(`模块 ${moduleName} 不在支持的 CDN 包列表中`);
+    console.warn(`模块 ${moduleName} 不在包列表中`);
     return 'skip';
   }
 }
@@ -199,7 +201,7 @@ function parseImports(fileTree: any, formPath: string, code: string) {
         continue;
       } else if (handleResult === 'css') {
         // CSS 文件在 ESM_PACKAGE_TYPE 中存在，使用该地址
-        const cssUrl = ESM_PACKAGE_TYPE[moduleName];
+        const cssUrl = CONFIG.ESM_PACKAGE_TYPE[moduleName];
         // 使用 cssUrl2Js 函数生成动态加载代码
         const url = cssUrl2Js(cssUrl, moduleName);
         resultCode = replaceImportStatement(
@@ -213,23 +215,14 @@ function parseImports(fileTree: any, formPath: string, code: string) {
         // ESM 模块：保持 import 语句，通过 importmap 解析
         continue;
       } else if (handleResult === 'skip') {
-        // 不在支持的包列表中的模块，需要特殊处理或跳过
-        if (/\.css$/i.test(moduleName)) {
-          // 为 CSS 文件生成动态加载代码
-          const cssUrl = `https://esm.sh/${moduleName}@latest`;
-          // 使用 cssUrl2Js 函数生成动态加载代码
-          const url = cssUrl2Js(cssUrl, moduleName);
-          resultCode = replaceImportStatement(
-            resultCode,
-            importStatement,
-            moduleName,
-            url,
-          );
-        } else {
-          // 其他静态资源，暂时跳过
-          console.warn(`不支持的静态资源类型: ${moduleName}`);
-          resultCode = resultCode.replace(importStatement, '');
-        }
+        // 生成动态加载代码
+        const url = `https://esm.sh/${moduleName}@latest`;
+        resultCode = replaceImportStatement(
+          resultCode,
+          importStatement,
+          moduleName,
+          url,
+        );
         continue;
       }
     }
@@ -315,9 +308,10 @@ const transpile = (fileTree: any, formPath: string, code: any) => {
 
 self.addEventListener('message', async ({ data }) => {
   try {
+    CONFIG = resolveConfig(data.config);
     self.postMessage({
       type: 'UPDATE_FILE',
-      data: transpile(data, 'main.jsx', data['main.jsx']),
+      data: transpile(data.codeTree, 'main.jsx', data.codeTree['main.jsx']),
     });
   } catch (e) {
     self.postMessage({ type: 'ERROR', error: e });

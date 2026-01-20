@@ -4,11 +4,32 @@ import { useEffect, useRef, useState } from 'react';
 import { Splitter, Tree } from 'antd';
 import CompilerWorker from './compiler.worker.ts?worker&inline';
 import { merge } from 'lodash';
-import { EXTENSION_LANGUAGE } from '@/tools/constant';
+import {
+  DEPS,
+  ESM_PACKAGE_TYPE,
+  UMD_PACKAGE_TYPE,
+  EXTENSION_LANGUAGE,
+} from './config';
 import { DownOutlined } from '@ant-design/icons';
 
+const SETTING_TAB = [
+  {
+    label: '配置',
+    value: 'config',
+  },
+];
+
+// 默认配置
+let defaultConfig = {
+  DEPS,
+  ESM_PACKAGE_TYPE,
+  UMD_PACKAGE_TYPE,
+};
+
+// 所有文件模块
 const allModules = import.meta.glob('/src/pages/**/*.*', { as: 'raw' });
 
+// 依据目录生成项目树
 function buildTreeAndNestedFiles(baseDir: string) {
   const root: any[] = [];
   const nestedFiles: any = {};
@@ -87,6 +108,7 @@ function buildTreeAndNestedFiles(baseDir: string) {
   });
 }
 
+// 入口文件
 const getMain = (catalog: string) => ({
   'main.jsx': `import React from 'react';
 import ReactDOM from 'react-dom';
@@ -116,8 +138,9 @@ const IdeEditor = ({ catalog }: any) => {
   // 默认展开
   const [defaultExpandedKeys, setDefaultExpandedKeys] = useState<any[]>([]);
   // 默认选中
-  const [defaultSelectedKeys, setDefaultSelectedKeys] = useState<any[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<any[]>([]);
   const iframeRef: any = useRef(null);
+  const [settingTab, setSettingTab] = useState<any>();
 
   useEffect(() => {
     const el: any = document.getElementById('ideEditor');
@@ -144,6 +167,14 @@ const IdeEditor = ({ catalog }: any) => {
       readOnly: false,
       automaticLayout: true,
       fontSize: 18,
+      tabSize: 2,
+      insertSpaces: true,
+      // 自动格式化行为
+      autoClosingBrackets: 'always',
+      autoClosingQuotes: 'always',
+      autoIndent: 'full',
+      formatOnType: true, // 输入时自动格式化
+      formatOnPaste: true, // 粘贴时自动格式化
     });
     // 开启 TypeScript 诊断和语法检查
     monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
@@ -153,8 +184,15 @@ const IdeEditor = ({ catalog }: any) => {
     load();
     // command + S 保存
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      saveToCatalogue(currentSelect);
-      compiler?.postMessage(filesCodeTreeRef.current);
+      if (currentSelect === 'OPEN_CONFIG') {
+        defaultConfig = JSON.parse(editor.getValue());
+      } else {
+        saveToCatalogue(currentSelect);
+      }
+      compiler?.postMessage({
+        codeTree: filesCodeTreeRef.current,
+        config: defaultConfig,
+      });
     });
 
     getFilesAndPath();
@@ -172,10 +210,13 @@ const IdeEditor = ({ catalog }: any) => {
     const defaultKey = tree?.[0]?.children?.find((t: any) =>
       ['index.jsx', 'index.tsx'].includes(t.title),
     )?.key;
-    setDefaultSelectedKeys([defaultKey]);
+    setSelectedKeys([defaultKey]);
     currentSelect = defaultKey;
     setPathCode(defaultKey, files);
-    compiler?.postMessage(filesCodeTreeRef.current);
+    compiler?.postMessage({
+      codeTree: filesCodeTreeRef.current,
+      config: defaultConfig,
+    });
     console.log('目录结构树:', tree);
     console.log('文件内容映射:', files);
   };
@@ -186,7 +227,6 @@ const IdeEditor = ({ catalog }: any) => {
       if (data.type === 'UPDATE_FILE') {
         try {
           console.log(data);
-
           // 生成 UMD 脚本标签
           const umdScripts = Object.entries(data.data.scriptSrcMap || {})
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -242,11 +282,18 @@ const IdeEditor = ({ catalog }: any) => {
 
   // 选择
   const onSelect = (keys: any[], e: any) => {
+    setSettingTab(null);
+    setSelectedKeys(keys);
     if (!e.node.isLeaf) return;
     if (keys.length === 0) return;
-    prevSelect = currentSelect;
-    currentSelect = keys[0];
-    saveToCatalogue(prevSelect);
+    if (currentSelect === 'OPEN_CONFIG') {
+      currentSelect = keys[0];
+      defaultConfig = JSON.parse(editor.getValue());
+    } else {
+      prevSelect = currentSelect;
+      currentSelect = keys[0];
+      saveToCatalogue(prevSelect);
+    }
     // 文件后缀
     const ext = currentSelect.split('.').pop().toLowerCase();
     monaco.editor.setModelLanguage(
@@ -293,17 +340,38 @@ const IdeEditor = ({ catalog }: any) => {
     }
   };
 
+  // 打开设置
+  const openConfig = () => {
+    prevSelect = currentSelect;
+    saveToCatalogue(prevSelect);
+    currentSelect = 'OPEN_CONFIG';
+    setSelectedKeys([]);
+    monaco.editor.setModelLanguage(editor.getModel(), EXTENSION_LANGUAGE.json);
+    editor.setValue(JSON.stringify(defaultConfig));
+    setTimeout(() => {
+      editor.getAction('editor.action.formatDocument').run();
+    }, 100);
+  };
+
+  const onChangeTab = (data: any) => {
+    setSettingTab(data);
+    if (data.value === 'config') {
+      openConfig();
+    }
+  };
+
   return (
     <div className="ide-editor">
       <div className="tips">control/command + s 保存</div>
       <Splitter>
         <Splitter.Panel defaultSize="180" min="50" max="200">
+          <div className="nav-header menu-header">目录</div>
           <div className="menu-list">
-            {defaultExpandedKeys?.length && defaultSelectedKeys?.length && (
+            {defaultExpandedKeys?.length && (
               <Tree
                 switcherIcon={<DownOutlined />}
                 defaultExpandedKeys={defaultExpandedKeys}
-                defaultSelectedKeys={defaultSelectedKeys}
+                selectedKeys={selectedKeys}
                 onSelect={onSelect}
                 treeData={fileCatalogueTree}
               />
@@ -311,9 +379,23 @@ const IdeEditor = ({ catalog }: any) => {
           </div>
         </Splitter.Panel>
         <Splitter.Panel defaultSize="40%" min="20%" max="70%">
+          <div className="nav-header idea-header">
+            <ul className="setting">
+              {SETTING_TAB.map((t: any) => (
+                <li
+                  key={t.value}
+                  onClick={() => onChangeTab(t)}
+                  className={settingTab?.value === t.value ? 'active' : ''}
+                >
+                  配置
+                </li>
+              ))}
+            </ul>
+          </div>
           <div id="ideEditor" className="idea" />
         </Splitter.Panel>
         <Splitter.Panel>
+          <div className="nav-header view-header">预览</div>
           <iframe ref={iframeRef} className="view" />
         </Splitter.Panel>
       </Splitter>

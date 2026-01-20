@@ -4,10 +4,58 @@
   background: #1e1e1e;
   position: relative;
 
+  .nav-header {
+    height: 38px;
+    border-bottom: 1px solid rgba(230, 244, 255, 0.5);
+    color: #ffffff;
+
+    &.menu-header {
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+    }
+
+    &.idea-header {
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+
+      .setting {
+        height: 38px;
+        display: flex;
+        align-items: center;
+
+        > li {
+          height: 38px;
+          line-height: 36px;
+          cursor: pointer;
+          padding: 0 20px;
+          border-bottom: 2px solid transparent;
+
+          &:hover {
+            background-color: rgba(56, 56, 56, 0.84);
+          }
+
+          &.active {
+            border-bottom: 2px solid #1890ff;
+            background-color: rgba(56, 56, 56, 0.84);
+          }
+        }
+      }
+    }
+
+    &.view-header {
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+    }
+  }
+
   .menu-list {
     width: 100%;
-    height: 100%;
+    height: calc(100% - 38px);
     color: #ffffff;
+    padding: 10px 0 0 0;
     overflow-y: auto;
 
     .ant-tree {
@@ -22,7 +70,7 @@
 
   .idea {
     width: 100%;
-    height: 100%;
+    height: calc(100% - 38px);
   }
 
   .tips {
@@ -41,7 +89,7 @@
 
   .view {
     width: 100%;
-    height: 100%;
+    height: calc(100% - 38px);
     border: none;
     background: #ffffff;
   }
@@ -49,6 +97,7 @@
   .ant-splitter {
     .ant-splitter-bar-dragger {
       background: #383838;
+
       &:before {
         background: rgba(230, 244, 255, 0.5) !important;
       }

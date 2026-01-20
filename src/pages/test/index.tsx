@@ -1,6 +1,5 @@
-import DeepTwinsEngine3D from 'deeptwins-engine-3d';
-import 'deeptwins-engine-3d.css';
 import { useEffect } from 'react';
+import DeepTwinsEngine3D from 'deeptwins-engine-3d';
 import './index.less';
 
 const Test = () => {
